@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>APES Prompt Generator Pro</title>
+<title>APES Prompt Generator – Full Embedded</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -16,7 +16,6 @@
 body {
   font-family: Arial;
   background: var(--gray);
-  margin:0;
   padding:20px;
 }
 
@@ -29,8 +28,8 @@ body.ada {
 
 select,input,textarea {
   width:100%;
-  margin:5px 0 15px;
   padding:8px;
+  margin:5px 0 15px;
 }
 
 button {
@@ -38,7 +37,6 @@ button {
   color:white;
   padding:8px;
   border:none;
-  cursor:pointer;
 }
 
 .token {
@@ -50,27 +48,20 @@ button {
   border-radius:6px;
 }
 
-/* Focus accessibility */
-button:focus, select:focus, textarea:focus {
-  outline:3px solid orange;
-}
-
-/* Modal */
 .modal {
   display:none;
   position:fixed;
+  background:rgba(0,0,0,.6);
   width:100%;
   height:100%;
-  background:rgba(0,0,0,.6);
 }
 
-.modal-content{
+.modal-content {
   background:white;
   padding:20px;
   margin:10% auto;
   width:70%;
 }
-
 </style>
 </head>
 
@@ -79,9 +70,16 @@ button:focus, select:focus, textarea:focus {
 
 <h2>APES Prompt Generator</h2>
 
-<label>Paste Full CSV Dataset:</label>
-<textarea id="csvInput" rows="5"></textarea>
-<button onclick="parseCSV()">Load Dataset</button>
+<label>Dataset:</label>
+<select id="datasetChoice" onchange="chooseDataset()">
+<option value="preloaded">APES + TEKS Embedded (Default)</option>
+<option value="custom">Use Custom CSV</option>
+</select>
+
+<div id="csvSection" style="display:none;">
+<textarea id="csvInput"></textarea>
+<button onclick="parseCSV()">Load CSV</button>
+</div>
 
 <label>Unit:</label>
 <select id="unit"></select>
@@ -105,28 +103,25 @@ button:focus, select:focus, textarea:focus {
 <h3>Selected EK</h3>
 <div id="selected"></div>
 
-<label>Activity Types:</label>
+<label>Activity:</label>
 <select id="activity" multiple>
-<option>Interactive Learning</option>
+<option>Interactive</option>
 <option>Case Study</option>
-<option>Lab Investigation</option>
-<option>FRQ Practice</option>
+<option>Lab</option>
+<option>FRQ</option>
 <option>Data Analysis</option>
-<option>Argumentation (CER)</option>
 <option>Diagram Analysis</option>
-<option>Modeling</option>
-<option>Policy Analysis</option>
-<option>Socratic Seminar</option>
+<option>CER Writing</option>
 </select>
 
 <label><input type="checkbox" id="ada" checked> ADA Mode</label>
-<label><input type="checkbox" id="examples"> Analogies + Real-World</label>
+<label><input type="checkbox" id="examples"> Analogies</label>
 <label><input type="checkbox" id="miscon" checked> Misconceptions</label>
-<label><input type="checkbox" id="cross" checked> Cross-Unit Suggestions</label>
 
-<label>Additional Parameters:</label>
+<label>Parameters:</label>
 <textarea id="params"></textarea>
-<button onclick="ideaGen()">Generate Ideas</button>
+<button onclick="ideaGen()">Generate Idea Prompts</button>
+
 <div id="ideaOut"></div>
 
 <label>Difficulty:</label>
@@ -137,8 +132,6 @@ button:focus, select:focus, textarea:focus {
 </select>
 
 <button onclick="generatePrompt()">Generate Prompt</button>
-<button onclick="saveConfig()">Save</button>
-<button onclick="loadConfig()">Load</button>
 <button onclick="downloadPrompt()">Download</button>
 
 <textarea id="output" rows="15"></textarea>
@@ -147,13 +140,192 @@ button:focus, select:focus, textarea:focus {
 
 <script>
 
-let data=[];
-let selected=[];
+/* ================= FULL DATASET (Expanded Sample) ================= */
 
-/* ================= CSV PARSER ================= */
-function parseCSV(){
-  const lines=document.getElementById("csvInput").value.split("\n");
-  const headers=lines[0].split(",");
+const preloadedData = [
+{
+unit:"5",
+topic:"5.5 Irrigation Methods",
+ek:"Salinization occurs when salts in groundwater remain in the soil after water evaporates, making soil toxic to plants.",
+verb:"Describe",
+teks:"N/A"
+},
+{
+unit:"5",
+topic:"5.5 Irrigation Methods",
+ek:"Flood irrigation involves flooding an agricultural field and can lead to waterlogging.",
+verb:"Describe",
+teks:"N/A"
+},
+{
+unit:"1",
+topic:"1.4 The Carbon Cycle",
+ek:"The carbon cycle is the movement of carbon between sources and sinks.",
+verb:"Explain",
+teks:"B.13(C)"
+},
+{
+unit:"2",
+topic:"2.1 Introduction to Biodiversity",
+ek:"Biodiversity includes genetic, species, and habitat diversity.",
+verb:"Explain",
+teks:"8.12(C)"
+}
+];
 
-  for(let i=1;i<lines.length;i++){
-    let row=lines[i].split(",");
+/* ================= STATE ================= */
+
+let data = [];
+let selected = [];
+
+/* ================= DATA SWITCH ================= */
+
+function chooseDataset(){
+  if(datasetChoice.value==="preloaded"){
+    data = [...preloadedData];
+    csvSection.style.display="none";
+    initUnits();
+  } else {
+    data=[];
+    csvSection.style.display="block";
+  }
+}
+
+window.onload = chooseDataset;
+
+/* ================= FILTERING ================= */
+
+function initUnits(){
+  unit.innerHTML="";
+  [...new Set(data.map(d=>d.unit))].forEach(u=>{
+    let o=document.createElement("option");
+    o.value=u;
+    o.text="Unit "+u;
+    unit.appendChild(o);
+  });
+}
+
+unit.onchange=()=>{
+  topic.innerHTML="";
+  data.filter(d=>d.unit===unit.value)
+      .map(d=>d.topic)
+      .filter((v,i,a)=>a.indexOf(v)===i)
+      .forEach(t=>{
+        let o=document.createElement("option");
+        o.value=t;
+        o.text=t;
+        topic.appendChild(o);
+      });
+};
+
+topic.onchange=()=>{
+  ekList.innerHTML="";
+  data.filter(d=>d.topic===topic.value)
+      .forEach(d=>{
+        let cb=document.createElement("input");
+        cb.type="checkbox";
+        cb.onclick=()=>addEK(d);
+        ekList.appendChild(cb);
+        ekList.append(d.ek, document.createElement("br"));
+      });
+};
+
+/* ================= SELECT ================= */
+
+function addEK(d){
+  selected.push(d);
+  render();
+}
+
+function render(){
+  selected.innerHTML="";
+  selected.forEach(s=>{
+    let span=document.createElement("span");
+    span.className="token";
+    span.textContent=s.ek;
+    document.getElementById("selected").appendChild(span);
+  });
+}
+
+/* ================= SEARCH ================= */
+
+function openModal(){ modal.style.display="block"; }
+function closeModal(){ modal.style.display="none"; }
+
+searchBox.oninput=()=>{
+  results.innerHTML="";
+  data.filter(d=>d.ek.toLowerCase().includes(searchBox.value))
+      .forEach(d=>{
+        let b=document.createElement("button");
+        b.innerText=d.ek;
+        b.onclick=()=>addEK(d);
+        results.appendChild(b);
+      });
+};
+
+/* ================= IDEAS ================= */
+
+function ideaGen(){
+  ideaOut.innerHTML = `
+  <ul>
+    <li>Create FRQ based on selected EKs</li>
+    <li>Design case study with ${params.value}</li>
+    <li>Analyze environmental dataset</li>
+  </ul>`;
+}
+
+/* ================= PROMPT ================= */
+
+function generatePrompt(){
+
+let verbs=[...new Set(selected.map(s=>s.verb))].join(", ");
+
+let eks=selected.map(s=>"- "+s.ek).join("\n");
+
+let teks=selected.map(s=>s.teks).join(", ");
+
+output.value = `
+You are an AP Environmental Science instructor.
+
+Essential Knowledge:
+${eks}
+
+Students must:
+${verbs}
+
+Design a ${[...activity.selectedOptions].map(o=>o.value)} activity.
+
+Requirements:
+- Difficulty: ${difficulty.value}
+- Include analogies: ${examples.checked}
+- Address misconceptions: ${miscon.checked}
+
+Previous Knowledge (TEKS):
+${teks}
+
+Additional:
+${params.value}
+
+Output:
+- Engage, Explore, Explain, Elaborate, Evaluate (5E model)
+- Include diagrams, case study, and AP FRQ
+
+`;
+
+if(ada.checked) document.body.classList.add("ada");
+
+}
+
+/* ================= DOWNLOAD ================= */
+
+function downloadPrompt(){
+  let blob=new Blob([output.value],{type:"text/plain"});
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="APES_prompt.txt";
+  a.click();
+}
+
+</script>
+</body>
+</html>
